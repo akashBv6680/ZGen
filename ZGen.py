@@ -64,7 +64,7 @@ if uploaded_file is not None:
                         setup(df, transaction_id=df.columns[0], item_id=df.columns[1], session_id=123, silent=True, verbose=False)
                         model = create_model()
                     elif ml_type == "NLP":
-                        setup(data=df, target=target_column, session_id=123, verbose=False)
+                        setup(data=df, session_id=123, verbose=False)
                         model = create_model('lda')
 
                         st.subheader("📊 Wordcloud")

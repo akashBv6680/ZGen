@@ -10,7 +10,6 @@ from pycaret.classification import *
 from pycaret.regression import *
 from pycaret.clustering import *
 from pycaret.anomaly import *
-from pycaret.arules import *
 from pycaret.nlp import *
 import base64
 import matplotlib.pyplot as plt

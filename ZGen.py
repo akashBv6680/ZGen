@@ -1,175 +1,98 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import os
-import time
-import yagmail
-import requests
 from pycaret.classification import *
 from pycaret.regression import *
 from pycaret.clustering import *
 from pycaret.anomaly import *
-from flask import Flask, request, jsonify
-from threading import Thread
-from sklearn.preprocessing import LabelEncoder
+from pycaret.nlp import *
+from pycaret.arules import *
+from email_validator import validate_email, EmailNotValidError
+import requests
+import yagmail
+import time
 
-# === CONFIG ===
-EMAIL_ADDRESS = "akashvishnu6680@gmail.com"
-EMAIL_PASSWORD = "swpe pwsx ypqo hgnk"
-TOGETHER_API_KEY = "tgp_v1_ecSsk1__FlO2mB_gAaaP2i-Affa6Dv8OCVngkWzBJUY"
-MODEL_NAME = "automl_model"
-THEME_COLOR = "#0A9396"
+# 🎨 Streamlit page config
+st.set_page_config(page_title="AutoML + Agentic AI", layout="wide")
+st.title("🤖 AutoML with Agentic AI Integration")
+st.markdown("""
+This app auto-detects your ML task, trains the best model, explains it, and emails results to your client ✉️
+""")
 
-# === STYLING ===
-st.set_page_config(page_title="Agentic AutoML", layout="wide", page_icon="🤖")
+uploaded_file = st.file_uploader("📂 Upload your dataset (CSV format only)", type=["csv"])
 
-st.markdown(
-    f"""
-    <style>
-        .stApp {{
-            background-color: #F8F9FA;
-        }}
-        .big-font {{
-            font-size:28px !important;
-            color: {THEME_COLOR};
-        }}
-    </style>
-    """, unsafe_allow_html=True
-)
-
-# === HEADER ===
-st.markdown("<h1 class='big-font'>🤖 Agentic AutoML System</h1>", unsafe_allow_html=True)
-st.markdown("Upload your dataset and let the agent decide the best ML approach.")
-
-# === INPUTS ===
-client_email = st.text_input("📧 Enter your client's email", placeholder="someone@example.com")
-uploaded_file = st.file_uploader("📁 Upload your dataset (.csv)", type=["csv"])
-
-df = None
-target = None
-task_type = None
-
-# === READ & DISPLAY FILE ===
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
-        st.success("✅ File uploaded successfully!")
-        st.dataframe(df.head(5))
-        st.write("🧾 Column types:", df.dtypes)
+        st.success("✅ Data loaded successfully!")
+        st.dataframe(df.head())
 
-        if not df.empty:
-            possible_targets = df.columns[df.nunique() < 30].tolist()
-            target = st.selectbox("🎯 Select target variable (or skip for unsupervised)", ["None"] + list(df.columns))
-            if target != "None":
-                if df[target].dtype == object or df[target].nunique() <= 10:
-                    task_type = "classification"
-                elif df[target].dtype in [np.float64, np.int64] and df[target].nunique() > 10:
-                    task_type = "regression"
+        task_type = None
+        target_column = st.selectbox("🎯 Select target variable (or skip for unsupervised)", [None] + df.columns.tolist())
+
+        if target_column:
+            if df[target_column].dtype == 'object' or df[target_column].nunique() <= 20:
+                task_type = 'classification'
+                st.info("🧠 Detected Task Type: classification")
             else:
-                task_type = st.selectbox("🔍 No target selected. Choose task manually:", ["clustering", "anomaly"])
-
-            st.info(f"🧠 Detected Task Type: `{task_type}`")
+                task_type = 'regression'
+                st.info("🧠 Detected Task Type: regression")
         else:
-            st.error("Empty dataset. Please upload a valid CSV.")
+            st.info("🔍 No target selected. Using unsupervised mode (clustering/anomaly detection).")
 
-    except Exception as e:
-        st.error(f"❌ Error reading CSV: {e}")
-
-# === MAIN AUTOML BUTTON ===
-if st.button("🚀 Run AutoML"):
-    if df is not None and task_type:
-        with st.spinner("Training the best model... please wait"):
-            try:
-                if task_type in ["classification", "regression"]:
-                    setup(data=df, target=target, session_id=42, silent=True, html=False)
+        if st.button("🚀 Run AutoML"):
+            with st.spinner("Running PyCaret... Please wait!"):
+                if task_type == 'classification':
+                    s = setup(df, target_column, session_id=123, silent=True, html=False)
+                    best_model = compare_models()
+                elif task_type == 'regression':
+                    s = pycaret.regression.setup(df, target_column, session_id=123, silent=True, html=False)
+                    best_model = pycaret.regression.compare_models()
                 else:
-                    setup(data=df, session_id=42, silent=True, html=False)
+                    s = setup(df, session_id=123, silent=True, html=False)
+                    best_model = create_model('kmeans')
 
-                best_model = compare_models()
                 tuned_model = tune_model(best_model)
                 evaluate_model(tuned_model)
                 interpret_model(tuned_model)
-                save_model(tuned_model, MODEL_NAME)
+                save_model(tuned_model, 'best_model')
 
-                st.success("✅ Model training complete!")
+                st.success("✅ Model trained and saved as 'best_model.pkl'!")
                 st.balloons()
-                st.download_button("⬇️ Download Model", open(f"{MODEL_NAME}.pkl", "rb"), file_name=f"{MODEL_NAME}.pkl")
 
-                if client_email:
-                    try:
-                        yag = yagmail.SMTP(EMAIL_ADDRESS, EMAIL_PASSWORD)
-                        yag.send(
-                            to=client_email,
-                            subject="✅ Your Model is Ready",
-                            contents=f"Hi,\n\nYour {task_type} model has been trained and is ready for use.\n\nThanks,\nAgentic AI"
-                        )
-                        st.success("📨 Client notified by email.")
-                    except Exception as e:
-                        st.warning(f"Failed to send email: {e}")
+        st.markdown("---")
 
+        # Email Section
+        st.subheader("📤 Send results to your client")
+        client_email = st.text_input("Enter client's email address")
+
+        if st.button("📧 Start API & Agentic AI"):
+            try:
+                validation = validate_email(client_email)
+                client_email = validation.email
+
+                # Simulated API call using Together API (Example)
+                TOGETHER_API_KEY_1 = "tgp_v1_ecSsk1__FlO2mB_gAaaP2i-Affa6Dv8OCVngkWzBJUY"
+                TOGETHER_API_KEY_2 = "tgp_v1_4hJBRX0XDlwnw_hhUnhP0e_lpI-u92Xhnqny2QIDAIM"
+                headers = {"Authorization": f"Bearer {TOGETHER_API_KEY_1}"}
+                data = {"prompt": "Summarize AutoML results in plain English.", "max_tokens": 100}
+                response = requests.post("https://api.together.xyz/infer", json=data, headers=headers)
+
+                if response.status_code == 200:
+                    summary = response.json().get("output", "AutoML summary unavailable.")
+                else:
+                    summary = "Summary could not be generated."
+
+                # Send Email
+                yag = yagmail.SMTP("akashvishnu6680@gmail.com", "swpe pwsx ypqo hgnk")
+                yag.send(to=client_email, subject="✅ AutoML Model Results", contents=summary)
+                st.success(f"📬 Email sent to {client_email} successfully!")
+
+            except EmailNotValidError as e:
+                st.error(f"❌ Invalid email: {e}")
             except Exception as e:
-                st.error(f"❌ AutoML process failed: {e}")
-    else:
-        st.error("Please upload a file and let the system detect a task.")
+                st.error(f"📛 Something went wrong: {e}")
 
-# === START API & AGENT ===
-def start_flask_api():
-    app = Flask(__name__)
-    model = load_model(MODEL_NAME)
-
-    @app.route('/predict', methods=['POST'])
-    def predict():
-        data = pd.DataFrame(request.json)
-        preds = predict_model(model, data=data)
-        return jsonify(preds.to_dict(orient="records"))
-
-    app.run(port=5000)
-
-def start_agentic_listener(client_email):
-    import imaplib
-    import email
-
-    def agentic_response(msg):
-        headers = {
-            "Authorization": f"Bearer {TOGETHER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        body = {
-            "model": "mistral-7b-chat",
-            "messages": [
-                {"role": "system", "content": "You are a helpful ML assistant."},
-                {"role": "user", "content": msg}
-            ],
-            "temperature": 0.7
-        }
-        res = requests.post("https://api.together.xyz/v1/chat/completions", headers=headers, json=body)
-        return res.json()["choices"][0]["message"]["content"] if res.status_code == 200 else "I'm sorry, I couldn't generate a response."
-
-    mail = imaplib.IMAP4_SSL("imap.gmail.com")
-    mail.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-    mail.select("inbox")
-
-    while True:
-        status, messages = mail.search(None, f'(UNSEEN FROM "{client_email}")')
-        if status == "OK":
-            for num in messages[0].split():
-                typ, data = mail.fetch(num, '(RFC822)')
-                for part in data:
-                    if isinstance(part, tuple):
-                        msg = email.message_from_bytes(part[1])
-                        body = msg.get_payload(decode=True).decode()
-                        reply = agentic_response(body)
-                        yagmail.SMTP(EMAIL_ADDRESS, EMAIL_PASSWORD).send(
-                            to=client_email,
-                            subject="🤖 Agentic AI Response",
-                            contents=reply
-                        )
-        time.sleep(60)
-
-if st.button("🌐 Start API & Agentic AI"):
-    if os.path.exists(f"{MODEL_NAME}.pkl") and client_email:
-        Thread(target=start_flask_api).start()
-        Thread(target=start_agentic_listener, args=(client_email,)).start()
-        st.success("🚀 API and auto-responder started!")
-    else:
-        st.warning("Train the model and enter client email first.")
+    except Exception as e:
+        st.error(f"❌ Error reading file: {e}")
+else:
+    st.warning("📥 Please upload a CSV file to begin.")

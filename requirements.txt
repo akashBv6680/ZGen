@@ -8,7 +8,7 @@ scipy==1.9.3
 email-validator
 requests
 flask
-joblib
+joblib==1.2.0
 yagmail
 matplotlib
 seaborn

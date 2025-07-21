@@ -3,10 +3,13 @@ pandas
 numpy
 scikit-learn==1.2.2
 pycaret==3.0.0
-yagmail
+scikit-plot==0.3.7
+scipy==1.9.3
+email-validator
 requests
 flask
 joblib
+yagmail
 matplotlib
 seaborn
 plotly

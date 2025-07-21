@@ -1,10 +1,9 @@
 streamlit
 pandas
 numpy
-pycaret[full] 
-yagmail
+pycaret[full]==3.2.0  
 email-validator
 matplotlib
-scikit-learn
+scikit-learn>=1.0.0  
 scipy
 requests

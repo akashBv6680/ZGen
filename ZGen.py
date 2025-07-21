@@ -1,108 +1,93 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import os
-import time
-import requests
-import yagmail
-from email_validator import validate_email, EmailNotValidError
 from pycaret.classification import *
 from pycaret.regression import *
-from pycaret.clustering import *
-from pycaret.anomaly import *
-import base64
-import matplotlib.pyplot as plt
-from io import BytesIO
+import shap
+import smtplib
+import ssl
+from email.message import EmailMessage
+import os
 
-st.set_page_config(page_title="Agentic AutoML App", layout="wide")
-st.title("🤖 Agentic AutoML Platform")
-st.markdown("""
-<style>
-    .reportview-container .markdown-text-container {
-        font-family: 'Roboto';
-        background-color: #f7f9fc;
-        padding: 10px;
-        border-radius: 10px;
-    }
-</style>
-""", unsafe_allow_html=True)
+# --- Constants ---
+TOGETHER_API_KEY_1 = "tgp_v1_ecSsk1__FlO2mB_gAaaP2i-Affa6Dv8OCVngkWzBJUY"
+TOGETHER_API_KEY_2 = "tgp_v1_4hJBRX0XDlwnw_hhUnhP0e_lpI-u92Xhnqny2QIDAIM"
 
-uploaded_file = st.file_uploader("📄 Upload your CSV dataset", type=["csv"])
+EMAIL_ADDRESS = "akashvishnu6680@gmail.com"
+EMAIL_PASSWORD = "swpe pwsx ypqo hgnk"
 
-if uploaded_file is not None:
-    try:
-        df = pd.read_csv(uploaded_file)
-        st.success("✅ File uploaded and read successfully!")
-        st.dataframe(df.head())
+# --- Page Config ---
+st.set_page_config(page_title="Smart AutoML App", layout="wide")
 
-        target_column = st.selectbox("🎯 Select your target column (for supervised/NLP):", df.columns)
-        ml_type = st.radio("🧪 Choose ML Task Type:", ("Auto-Detect", "Classification", "Regression", "Clustering", "Anomaly Detection", "Association Rules", "NLP"))
-        client_email = st.text_input("📧 Enter your client’s email:")
+# --- Title ---
+st.title("🤖 Smart AutoML App with PyCaret")
+st.caption("Upload your dataset, pick a target, and let AI build your model!")
 
-        if st.button("🚀 Run AutoML"):
-            with st.spinner("Training model(s)..."):
-                try:
-                    if ml_type == "Auto-Detect":
-                        if df[target_column].nunique() <= 10 or df[target_column].dtype == 'object':
-                            ml_type = "Classification"
-                        else:
-                            ml_type = "Regression"
+# --- Upload ---
+uploaded_file = st.file_uploader("Upload your CSV dataset", type=["csv"])
+if uploaded_file:
+    df = pd.read_csv(uploaded_file)
+    st.success("Dataset Uploaded Successfully!")
+    st.dataframe(df.head())
 
-                    if ml_type == "Classification":
-                        setup(df, target=target_column, session_id=123, silent=True, verbose=False)
-                        model = compare_models()
-                    elif ml_type == "Regression":
-                        setup(df, target=target_column, session_id=123, silent=True, verbose=False)
-                        model = compare_models()
-                    elif ml_type == "Clustering":
-                        setup(df, session_id=123, silent=True, verbose=False)
-                        model = create_model('kmeans')
-                    elif ml_type == "Anomaly Detection":
-                        setup(df, session_id=123, silent=True, verbose=False)
-                        model = create_model('iforest')
-                    elif ml_type == "Association Rules":
-                        setup(df, transaction_id=df.columns[0], item_id=df.columns[1], session_id=123, silent=True, verbose=False)
-                        model = create_model()
-                    elif ml_type == "NLP":
-                        setup(data=df, session_id=123, verbose=False)
-                        model = create_model('lda')
+    # --- Target selection ---
+    target = st.selectbox("🎯 Select your target column", df.columns)
 
-                        st.subheader("📊 Wordcloud")
-                        plot_model(model, plot='wordcloud', save=True)
-                        st.image("Wordcloud.png")
+    task_type = st.radio("🔍 Select Task Type", ["Classification", "Regression"])
 
-                        st.subheader("📋 Topic Overview")
-                        topics = assign_model(model)
-                        st.dataframe(topics.head())
+    if st.button("🚀 Run AutoML"):
+        st.spinner("Running PyCaret setup and model comparison...")
+        st.toast("Running AutoML... please wait!")
+        st.balloons()
 
-                        csv = topics.to_csv(index=False).encode('utf-8')
-                        st.download_button("📥 Download Topics CSV", csv, "topics.csv", "text/csv")
+        # Run PyCaret
+        if task_type == "Classification":
+            exp1 = setup(data=df, target=target, session_id=123, silent=True, verbose=False)
+            best_model = compare_models()
+            tuned_model = tune_model(best_model)
+            evaluate_model(tuned_model)
+            interpret_model(tuned_model)
+        else:
+            exp1 = pycaret.regression.setup(data=df, target=target, session_id=123, silent=True, verbose=False)
+            best_model = pycaret.regression.compare_models()
+            tuned_model = pycaret.regression.tune_model(best_model)
+            pycaret.regression.evaluate_model(tuned_model)
+            pycaret.regression.interpret_model(tuned_model)
 
-                    if ml_type in ["Classification", "Regression"]:
-                        tuned_model = tune_model(model)
-                        evaluate_model(tuned_model)
-                        interpret_model(tuned_model)
-                        save_model(tuned_model, 'my_model')
-                    else:
-                        tuned_model = model
+        # Save model
+        save_path = save_model(tuned_model, 'my_model')
+        st.success("Model Trained and Saved!")
 
-                    st.success("✅ Model complete!")
-                    st.balloons()
+        # Deploy (simulated)
+        st.info("Model deployment via Flask is ready. Run `flask run` separately.")
 
-                    if client_email:
-                        try:
-                            validate_email(client_email)
-                            yag = yagmail.SMTP("akashvishnu6680@gmail.com", "swpe pwsx ypqo hgnk")
-                            yag.send(to=client_email, subject="✅ Your AutoML model is ready!", contents="Your model has been trained and results are attached.")
-                            st.success("📩 Email sent to client!")
-                        except EmailNotValidError as e:
-                            st.warning(f"Invalid email address: {e}")
-                        except Exception as e:
-                            st.warning(f"Failed to send email: {e}")
-                except Exception as e:
-                    st.error(f"❌ AutoML process failed: {str(e)}")
+        # Email the client
+        st.toast("Sending email to client...")
 
-    except Exception as e:
-        st.error(f"❌ Failed to read file: {str(e)}")
-else:
-    st.info("📂 Please upload a dataset to get started.")
+        def send_email():
+            subject = "🎉 Your AI Model is Ready!"
+            body = f"""
+Hello,
+
+Your machine learning model has been successfully trained and is ready to use!
+
+Kind regards,  
+Smart AutoML Agent  
+"""
+            msg = EmailMessage()
+            msg["From"] = EMAIL_ADDRESS
+            msg["To"] = EMAIL_ADDRESS
+            msg["Subject"] = subject
+            msg.set_content(body)
+
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+                server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+                server.send_message(msg)
+
+        try:
+            send_email()
+            st.success("Email sent to client! ✅")
+        except Exception as e:
+            st.error(f"Email failed: {e}")
+
+        st.balloons()

@@ -1,8 +1,9 @@
 streamlit
 pandas
-scikit-learn
+numpy
+scikit-learn==1.2.2
+pycaret==3.0.0
 yagmail
-pycaret
 requests
 flask
 joblib

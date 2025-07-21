@@ -1,15 +1,19 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import os
+import time
+import requests
+import yagmail
+
+from email_validator import validate_email, EmailNotValidError
+
+# PyCaret Modules (no NLP)
 from pycaret.classification import *
 from pycaret.regression import *
 from pycaret.clustering import *
 from pycaret.anomaly import *
-from pycaret.nlp import *
 from pycaret.arules import *
-from email_validator import validate_email, EmailNotValidError
-import requests
-import yagmail
-import time
 
 # 🎨 Streamlit page config
 st.set_page_config(page_title="AutoML + Agentic AI", layout="wide")

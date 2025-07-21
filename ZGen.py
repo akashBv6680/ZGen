@@ -5,98 +5,105 @@ import os
 import time
 import requests
 import yagmail
-
 from email_validator import validate_email, EmailNotValidError
-
-# PyCaret Modules (no NLP)
 from pycaret.classification import *
 from pycaret.regression import *
 from pycaret.clustering import *
 from pycaret.anomaly import *
 from pycaret.arules import *
+from pycaret.nlp import *
+import base64
+import matplotlib.pyplot as plt
+from io import BytesIO
 
-# 🎨 Streamlit page config
-st.set_page_config(page_title="AutoML + Agentic AI", layout="wide")
-st.title("🤖 AutoML with Agentic AI Integration")
+st.set_page_config(page_title="Agentic AutoML App", layout="wide")
+st.title("🤖 Agentic AutoML Platform")
 st.markdown("""
-This app auto-detects your ML task, trains the best model, explains it, and emails results to your client ✉️
-""")
+<style>
+    .reportview-container .markdown-text-container {
+        font-family: 'Roboto';
+        background-color: #f7f9fc;
+        padding: 10px;
+        border-radius: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("📂 Upload your dataset (CSV format only)", type=["csv"])
+uploaded_file = st.file_uploader("📄 Upload your CSV dataset", type=["csv"])
 
-if uploaded_file:
+if uploaded_file is not None:
     try:
         df = pd.read_csv(uploaded_file)
-        st.success("✅ Data loaded successfully!")
+        st.success("✅ File uploaded and read successfully!")
         st.dataframe(df.head())
 
-        task_type = None
-        target_column = st.selectbox("🎯 Select target variable (or skip for unsupervised)", [None] + df.columns.tolist())
-
-        if target_column:
-            if df[target_column].dtype == 'object' or df[target_column].nunique() <= 20:
-                task_type = 'classification'
-                st.info("🧠 Detected Task Type: classification")
-            else:
-                task_type = 'regression'
-                st.info("🧠 Detected Task Type: regression")
-        else:
-            st.info("🔍 No target selected. Using unsupervised mode (clustering/anomaly detection).")
+        target_column = st.selectbox("🎯 Select your target column (for supervised/NLP):", df.columns)
+        ml_type = st.radio("🧪 Choose ML Task Type:", ("Auto-Detect", "Classification", "Regression", "Clustering", "Anomaly Detection", "Association Rules", "NLP"))
+        client_email = st.text_input("📧 Enter your client’s email:")
 
         if st.button("🚀 Run AutoML"):
-            with st.spinner("Running PyCaret... Please wait!"):
-                if task_type == 'classification':
-                    s = setup(df, target_column, session_id=123, silent=True, html=False)
-                    best_model = compare_models()
-                elif task_type == 'regression':
-                    s = pycaret.regression.setup(df, target_column, session_id=123, silent=True, html=False)
-                    best_model = pycaret.regression.compare_models()
-                else:
-                    s = setup(df, session_id=123, silent=True, html=False)
-                    best_model = create_model('kmeans')
+            with st.spinner("Training model(s)..."):
+                try:
+                    if ml_type == "Auto-Detect":
+                        if df[target_column].nunique() <= 10 or df[target_column].dtype == 'object':
+                            ml_type = "Classification"
+                        else:
+                            ml_type = "Regression"
 
-                tuned_model = tune_model(best_model)
-                evaluate_model(tuned_model)
-                interpret_model(tuned_model)
-                save_model(tuned_model, 'best_model')
+                    if ml_type == "Classification":
+                        setup(df, target=target_column, session_id=123, silent=True, verbose=False)
+                        model = compare_models()
+                    elif ml_type == "Regression":
+                        setup(df, target=target_column, session_id=123, silent=True, verbose=False)
+                        model = compare_models()
+                    elif ml_type == "Clustering":
+                        setup(df, session_id=123, silent=True, verbose=False)
+                        model = create_model('kmeans')
+                    elif ml_type == "Anomaly Detection":
+                        setup(df, session_id=123, silent=True, verbose=False)
+                        model = create_model('iforest')
+                    elif ml_type == "Association Rules":
+                        setup(df, transaction_id=df.columns[0], item_id=df.columns[1], session_id=123, silent=True, verbose=False)
+                        model = create_model()
+                    elif ml_type == "NLP":
+                        setup(df, target=target_column, session_id=123, verbose=False)
+                        model = create_model('lda')
+                        st.subheader("📊 Wordcloud")
+                        plot_model(model, plot='wordcloud', save=True)
+                        st.image("Wordcloud.png")
 
-                st.success("✅ Model trained and saved as 'best_model.pkl'!")
-                st.balloons()
+                        st.subheader("📋 Topic Overview")
+                        topics = assign_model(model)
+                        st.dataframe(topics.head())
 
-        st.markdown("---")
+                        csv = topics.to_csv(index=False).encode('utf-8')
+                        st.download_button("📥 Download Topics CSV", csv, "topics.csv", "text/csv")
 
-        # Email Section
-        st.subheader("📤 Send results to your client")
-        client_email = st.text_input("Enter client's email address")
+                    if ml_type in ["Classification", "Regression"]:
+                        tuned_model = tune_model(model)
+                        evaluate_model(tuned_model)
+                        interpret_model(tuned_model)
+                        save_model(tuned_model, 'my_model')
+                    else:
+                        tuned_model = model
 
-        if st.button("📧 Start API & Agentic AI"):
-            try:
-                validation = validate_email(client_email)
-                client_email = validation.email
+                    st.success("✅ Model complete!")
+                    st.balloons()
 
-                # Simulated API call using Together API (Example)
-                TOGETHER_API_KEY_1 = "tgp_v1_ecSsk1__FlO2mB_gAaaP2i-Affa6Dv8OCVngkWzBJUY"
-                TOGETHER_API_KEY_2 = "tgp_v1_4hJBRX0XDlwnw_hhUnhP0e_lpI-u92Xhnqny2QIDAIM"
-                headers = {"Authorization": f"Bearer {TOGETHER_API_KEY_1}"}
-                data = {"prompt": "Summarize AutoML results in plain English.", "max_tokens": 100}
-                response = requests.post("https://api.together.xyz/infer", json=data, headers=headers)
-
-                if response.status_code == 200:
-                    summary = response.json().get("output", "AutoML summary unavailable.")
-                else:
-                    summary = "Summary could not be generated."
-
-                # Send Email
-                yag = yagmail.SMTP("akashvishnu6680@gmail.com", "swpe pwsx ypqo hgnk")
-                yag.send(to=client_email, subject="✅ AutoML Model Results", contents=summary)
-                st.success(f"📬 Email sent to {client_email} successfully!")
-
-            except EmailNotValidError as e:
-                st.error(f"❌ Invalid email: {e}")
-            except Exception as e:
-                st.error(f"📛 Something went wrong: {e}")
+                    if client_email:
+                        try:
+                            validate_email(client_email)
+                            yag = yagmail.SMTP("akashvishnu6680@gmail.com", "swpe pwsx ypqo hgnk")
+                            yag.send(to=client_email, subject="✅ Your AutoML model is ready!", contents="Your model has been trained and results are attached.")
+                            st.success("📩 Email sent to client!")
+                        except EmailNotValidError as e:
+                            st.warning(f"Invalid email address: {e}")
+                        except Exception as e:
+                            st.warning(f"Failed to send email: {e}")
+                except Exception as e:
+                    st.error(f"❌ AutoML process failed: {str(e)}")
 
     except Exception as e:
-        st.error(f"❌ Error reading file: {e}")
+        st.error(f"❌ Failed to read file: {str(e)}")
 else:
-    st.warning("📥 Please upload a CSV file to begin.")
+    st.info("📂 Please upload a dataset to get started.")

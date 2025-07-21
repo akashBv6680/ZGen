@@ -1,8 +1,10 @@
 streamlit
 pandas
 numpy
-pycaret
+pycaret[full] 
 yagmail
 email-validator
 matplotlib
-requests 
+scikit-learn
+scipy
+requests

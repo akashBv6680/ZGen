@@ -1,93 +1,146 @@
 import streamlit as st
 import pandas as pd
-from pycaret.classification import *
-from pycaret.regression import *
-import shap
+import pycaret.classification as clf
+import pycaret.regression as reg
 import smtplib
 import ssl
 from email.message import EmailMessage
-import os
 
-# --- Constants ---
-TOGETHER_API_KEY_1 = "tgp_v1_ecSsk1__FlO2mB_gAaaP2i-Affa6Dv8OCVngkWzBJUY"
-TOGETHER_API_KEY_2 = "tgp_v1_4hJBRX0XDlwnw_hhUnhP0e_lpI-u92Xhnqny2QIDAIM"
-
+# === Email Config ===
 EMAIL_ADDRESS = "akashvishnu6680@gmail.com"
 EMAIL_PASSWORD = "swpe pwsx ypqo hgnk"
 
-# --- Page Config ---
+# === Streamlit App ===
 st.set_page_config(page_title="Smart AutoML App", layout="wide")
+st.title("🚀 Smart AutoML with PyCaret")
+st.caption("Upload your dataset, select the target, and let AI do the rest!")
 
-# --- Title ---
-st.title("🤖 Smart AutoML App with PyCaret")
-st.caption("Upload your dataset, pick a target, and let AI build your model!")
-
-# --- Upload ---
-uploaded_file = st.file_uploader("Upload your CSV dataset", type=["csv"])
+# === Upload Dataset ===
+uploaded_file = st.file_uploader("📂 Upload your CSV dataset", type=["csv"])
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-    st.success("Dataset Uploaded Successfully!")
+    st.success("✅ Dataset uploaded successfully!")
     st.dataframe(df.head())
 
-    # --- Target selection ---
-    target = st.selectbox("🎯 Select your target column", df.columns)
+    # === Target Column ===
+    target = st.selectbox("🎯 Select the target column", df.columns)
 
-    task_type = st.radio("🔍 Select Task Type", ["Classification", "Regression"])
+    # === Task Type ===
+    task_type = st.radio("📊 Select task type", ["Classification", "Regression"])
 
     if st.button("🚀 Run AutoML"):
-        st.spinner("Running PyCaret setup and model comparison...")
-        st.toast("Running AutoML... please wait!")
-        st.balloons()
+        st.toast("Running AutoML... Please wait")
+        with st.spinner("Training model and tuning parameters..."):
 
-        # Run PyCaret
-        if task_type == "Classification":
-            exp1 = setup(data=df, target=target, session_id=123, silent=True, verbose=False)
-            best_model = compare_models()
-            tuned_model = tune_model(best_model)
-            evaluate_model(tuned_model)
-            interpret_model(tuned_model)
-        else:
-            exp1 = pycaret.regression.setup(data=df, target=target, session_id=123, silent=True, verbose=False)
-            best_model = pycaret.regression.compare_models()
-            tuned_model = pycaret.regression.tune_model(best_model)
-            pycaret.regression.evaluate_model(tuned_model)
-            pycaret.regression.interpret_model(tuned_model)
+            # Validate target column
+            if df[target].isnull().sum() > 0:
+                st.error("❌ Target column contains missing values. Please clean your data.")
+            else:
+                try:
+                    if task_type == "Classification":
+                        clf.setup(data=df, target=target, session_id=123, silent=True, verbose=False)
+                        best_model = clf.compare_models()
+                        tuned_model = clf.tune_model(best_model)
+                        clf.evaluate_model(tuned_model)
+                        clf.interpret_model(tuned_model)
+                        clf.save_model(tuned_model, 'my_model')
+                    else:
+                        reg.setup(data=df, target=target, session_id=123, silent=True, verbose=False)
+                        best_model = reg.compare_models()
+                        tuned_model = reg.tune_model(best_model)
+                        reg.evaluate_model(tuned_model)
+                        reg.interpret_model(tuned_model)
+                        reg.save_model(tuned_model, 'my_model')
 
-        # Save model
-        save_path = save_model(tuned_model, 'my_model')
-        st.success("Model Trained and Saved!")
+                    st.success("✅ Our model is trained and saved successfully!")
+                    st.balloons()
 
-        # Deploy (simulated)
-        st.info("Model deployment via Flask is ready. Run `flask run` separately.")
+                    # === Email Notification ===
+                    def send_email():
+                        msg = EmailMessage()
+                        msg["Subject"] = "✅ Our ML Model is Ready!"
+                        msg["From"] = EMAIL_ADDRESS
+                        msg["To"] = EMAIL_ADDRESS
+                        msg.set_content(f"""
+Hi,
 
-        # Email the client
-        st.toast("Sending email to client...")
+Our machine learning model has been trained successfully using AutoML.
 
-        def send_email():
-            subject = "🎉 Your AI Model is Ready!"
-            body = f"""
-Hello,
+Task Type: {task_type}  
+Target Column: {target}
 
-Your machine learning model has been successfully trained and is ready to use!
+We can now use it to make predictions or deploy it.
 
 Kind regards,  
-Smart AutoML Agent  
-"""
-            msg = EmailMessage()
-            msg["From"] = EMAIL_ADDRESS
-            msg["To"] = EMAIL_ADDRESS
-            msg["Subject"] = subject
-            msg.set_content(body)
+Your AI Assistant 🤖
+""")
+                        context = ssl.create_default_context()
+                        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+                            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+                            server.send_message(msg)
 
-            context = ssl.create_default_context()
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
-                server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-                server.send_message(msg)
+                    send_email()
+                    st.success("📧 Notification email sent: Our ML model is ready!")
 
-        try:
-            send_email()
-            st.success("Email sent to client! ✅")
-        except Exception as e:
-            st.error(f"Email failed: {e}")
+                except Exception as e:
+                    st.error(f"⚠️ An error occurred: {str(e)}")
 
-        st.balloons()
+# --- Divider ---
+st.markdown("---")
+st.subheader("📨 Client Email Assistant")
+
+# === Client Email Interaction ===
+client_email = st.text_input("📧 Enter your client’s email address")
+client_question = st.text_area("💬 Type your client's message here")
+
+if st.button("🤖 Generate and Send Reply"):
+    if client_email and client_question:
+        with st.spinner("Agentic AI is replying..."):
+
+            # === Simple AI Reply Logic ===
+            if "model" in client_question.lower():
+                ai_reply = (
+                    "Hi,\n\n"
+                    "Our machine learning model is fully trained and ready to use. "
+                    "You can now upload new data to make predictions or we can help deploy it.\n\n"
+                    "Let me know how you'd like to proceed.\n\n"
+                    "Best regards,\nYour AI Assistant 🤖"
+                )
+            elif "how to use" in client_question.lower():
+                ai_reply = (
+                    "Hi,\n\n"
+                    "To use our model, you can either upload data for predictions or use the API we're preparing. "
+                    "If you need help integrating it, I'm here to assist.\n\n"
+                    "Regards,\nYour AI Assistant 🤖"
+                )
+            else:
+                ai_reply = (
+                    "Hi,\n\n"
+                    "Thank you for your message. I'm happy to help. Could you please provide more details "
+                    "about your request so I can assist better?\n\n"
+                    "Kind regards,\nYour AI Assistant 🤖"
+                )
+
+            # Show reply
+            st.text_area("✉️ Agentic AI Reply", value=ai_reply, height=150)
+
+            # === Email Reply to Client ===
+            def send_reply_email():
+                msg = EmailMessage()
+                msg["Subject"] = "🧠 Response from AI Assistant"
+                msg["From"] = EMAIL_ADDRESS
+                msg["To"] = client_email
+                msg.set_content(ai_reply)
+
+                context = ssl.create_default_context()
+                with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+                    server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+                    server.send_message(msg)
+
+            try:
+                send_reply_email()
+                st.success("📤 Reply sent to client successfully!")
+            except Exception as e:
+                st.error(f"⚠️ Email failed: {str(e)}")
+    else:
+        st.warning("Please enter both the client's email and message.")

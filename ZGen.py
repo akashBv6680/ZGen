@@ -1,76 +1,118 @@
 import streamlit as st
 import pandas as pd
-import time
+import numpy as np
 import os
-import joblib
-import requests
+import time
 import yagmail
-from threading import Thread
+import requests
 from pycaret.classification import *
 from pycaret.regression import *
 from pycaret.clustering import *
 from pycaret.anomaly import *
 from flask import Flask, request, jsonify
+from threading import Thread
+from sklearn.preprocessing import LabelEncoder
 
 # === CONFIG ===
-TOGETHER_API_KEY_1 = "tgp_v1_ecSsk1__FlO2mB_gAaaP2i-Affa6Dv8OCVngkWzBJUY"
-TOGETHER_API_KEY_2 = "tgp_v1_4hJBRX0XDlwnw_hhUnhP0e_lpI-u92Xhnqny2QIDAIM"
 EMAIL_ADDRESS = "akashvishnu6680@gmail.com"
 EMAIL_PASSWORD = "swpe pwsx ypqo hgnk"
+TOGETHER_API_KEY = "tgp_v1_ecSsk1__FlO2mB_gAaaP2i-Affa6Dv8OCVngkWzBJUY"
 MODEL_NAME = "automl_model"
+THEME_COLOR = "#0A9396"
 
-# === Streamlit Interface ===
-st.title("Agentic AutoML App 🤖")
+# === STYLING ===
+st.set_page_config(page_title="Agentic AutoML", layout="wide", page_icon="🤖")
 
-client_email = st.text_input("Enter your client's email address")
-task = st.selectbox("Select ML Task", ["classification", "regression", "clustering", "anomaly"])
-uploaded_file = st.file_uploader("Upload your dataset (CSV)", type=["csv"])
+st.markdown(
+    f"""
+    <style>
+        .stApp {{
+            background-color: #F8F9FA;
+        }}
+        .big-font {{
+            font-size:28px !important;
+            color: {THEME_COLOR};
+        }}
+    </style>
+    """, unsafe_allow_html=True
+)
 
+# === HEADER ===
+st.markdown("<h1 class='big-font'>🤖 Agentic AutoML System</h1>", unsafe_allow_html=True)
+st.markdown("Upload your dataset and let the agent decide the best ML approach.")
+
+# === INPUTS ===
+client_email = st.text_input("📧 Enter your client's email", placeholder="someone@example.com")
+uploaded_file = st.file_uploader("📁 Upload your dataset (.csv)", type=["csv"])
+
+df = None
 target = None
-if task in ["classification", "regression"] and uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    target = st.selectbox("Select target column", df.columns)
+task_type = None
 
-if st.button("Start AutoML Process"):
-    if uploaded_file is None or (task in ["classification", "regression"] and not target) or not client_email:
-        st.error("Please upload a dataset, select target, and enter client email.")
-    else:
+# === READ & DISPLAY FILE ===
+if uploaded_file:
+    try:
         df = pd.read_csv(uploaded_file)
-        st.write("Dataset Preview:", df.head())
+        st.success("✅ File uploaded successfully!")
+        st.dataframe(df.head(5))
+        st.write("🧾 Column types:", df.dtypes)
 
-        with st.spinner("Running AutoML..."):
-            # === Run PyCaret ===
-            if task == "classification":
-                setup(data=df, target=target, session_id=123, silent=True, html=False)
-            elif task == "regression":
-                setup(data=df, target=target, session_id=123, silent=True, html=False)
-            elif task == "clustering":
-                setup(data=df, session_id=123, html=False)
-            elif task == "anomaly":
-                setup(data=df, session_id=123, html=False)
+        if not df.empty:
+            possible_targets = df.columns[df.nunique() < 30].tolist()
+            target = st.selectbox("🎯 Select target variable (or skip for unsupervised)", ["None"] + list(df.columns))
+            if target != "None":
+                if df[target].dtype == object or df[target].nunique() <= 10:
+                    task_type = "classification"
+                elif df[target].dtype in [np.float64, np.int64] and df[target].nunique() > 10:
+                    task_type = "regression"
+            else:
+                task_type = st.selectbox("🔍 No target selected. Choose task manually:", ["clustering", "anomaly"])
 
-            best_model = compare_models()
-            tuned = tune_model(best_model)
-            evaluate_model(tuned)
-            interpret_model(tuned)
-            save_model(tuned, MODEL_NAME)
+            st.info(f"🧠 Detected Task Type: `{task_type}`")
+        else:
+            st.error("Empty dataset. Please upload a valid CSV.")
 
-            # === Send Email Notification ===
+    except Exception as e:
+        st.error(f"❌ Error reading CSV: {e}")
+
+# === MAIN AUTOML BUTTON ===
+if st.button("🚀 Run AutoML"):
+    if df is not None and task_type:
+        with st.spinner("Training the best model... please wait"):
             try:
-                yag = yagmail.SMTP(EMAIL_ADDRESS, EMAIL_PASSWORD)
-                yag.send(to=client_email,
-                         subject="✅ Your ML Model is Ready",
-                         contents=f"Hi,\n\nYour {task} model has been trained, tuned and is ready to use.\n\nThanks,\nAgentic AI")
-                st.success(f"Email sent to {client_email}!")
+                if task_type in ["classification", "regression"]:
+                    setup(data=df, target=target, session_id=42, silent=True, html=False)
+                else:
+                    setup(data=df, session_id=42, silent=True, html=False)
+
+                best_model = compare_models()
+                tuned_model = tune_model(best_model)
+                evaluate_model(tuned_model)
+                interpret_model(tuned_model)
+                save_model(tuned_model, MODEL_NAME)
+
+                st.success("✅ Model training complete!")
+                st.balloons()
+                st.download_button("⬇️ Download Model", open(f"{MODEL_NAME}.pkl", "rb"), file_name=f"{MODEL_NAME}.pkl")
+
+                if client_email:
+                    try:
+                        yag = yagmail.SMTP(EMAIL_ADDRESS, EMAIL_PASSWORD)
+                        yag.send(
+                            to=client_email,
+                            subject="✅ Your Model is Ready",
+                            contents=f"Hi,\n\nYour {task_type} model has been trained and is ready for use.\n\nThanks,\nAgentic AI"
+                        )
+                        st.success("📨 Client notified by email.")
+                    except Exception as e:
+                        st.warning(f"Failed to send email: {e}")
+
             except Exception as e:
-                st.error(f"Failed to send email: {e}")
+                st.error(f"❌ AutoML process failed: {e}")
+    else:
+        st.error("Please upload a file and let the system detect a task.")
 
-            st.success("Model training complete! 🎉")
-            with open(f"{MODEL_NAME}.pkl", "rb") as f:
-                st.download_button("Download Model", f, file_name=f"{MODEL_NAME}.pkl")
-
-
-# === Optional Flask API Deployment ===
+# === START API & AGENT ===
 def start_flask_api():
     app = Flask(__name__)
     model = load_model(MODEL_NAME)
@@ -78,33 +120,30 @@ def start_flask_api():
     @app.route('/predict', methods=['POST'])
     def predict():
         data = pd.DataFrame(request.json)
-        prediction = predict_model(model, data=data)
-        return jsonify(prediction.to_dict(orient="records"))
+        preds = predict_model(model, data=data)
+        return jsonify(preds.to_dict(orient="records"))
 
     app.run(port=5000)
 
-# === Optional Agentic AI Auto-Reply System ===
-def agentic_auto_reply_loop(client_email):
+def start_agentic_listener(client_email):
     import imaplib
     import email
 
     def agentic_response(msg):
         headers = {
-            "Authorization": f"Bearer {TOGETHER_API_KEY_1}",
+            "Authorization": f"Bearer {TOGETHER_API_KEY}",
             "Content-Type": "application/json"
         }
-        payload = {
+        body = {
             "model": "mistral-7b-chat",
             "messages": [
-                {"role": "system", "content": "You are a helpful assistant responding to the client's questions about their ML model."},
+                {"role": "system", "content": "You are a helpful ML assistant."},
                 {"role": "user", "content": msg}
             ],
             "temperature": 0.7
         }
-        response = requests.post("https://api.together.xyz/v1/chat/completions", headers=headers, json=payload)
-        if response.status_code == 200:
-            return response.json()["choices"][0]["message"]["content"]
-        return "Sorry, I couldn't understand your message."
+        res = requests.post("https://api.together.xyz/v1/chat/completions", headers=headers, json=body)
+        return res.json()["choices"][0]["message"]["content"] if res.status_code == 200 else "I'm sorry, I couldn't generate a response."
 
     mail = imaplib.IMAP4_SSL("imap.gmail.com")
     mail.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
@@ -115,20 +154,22 @@ def agentic_auto_reply_loop(client_email):
         if status == "OK":
             for num in messages[0].split():
                 typ, data = mail.fetch(num, '(RFC822)')
-                for response_part in data:
-                    if isinstance(response_part, tuple):
-                        msg = email.message_from_bytes(response_part[1])
+                for part in data:
+                    if isinstance(part, tuple):
+                        msg = email.message_from_bytes(part[1])
                         body = msg.get_payload(decode=True).decode()
                         reply = agentic_response(body)
-                        yag = yagmail.SMTP(EMAIL_ADDRESS, EMAIL_PASSWORD)
-                        yag.send(to=client_email, subject="🤖 Response to Your Message", contents=reply)
+                        yagmail.SMTP(EMAIL_ADDRESS, EMAIL_PASSWORD).send(
+                            to=client_email,
+                            subject="🤖 Agentic AI Response",
+                            contents=reply
+                        )
         time.sleep(60)
 
-# === Button to Launch Flask API + Agentic Listener ===
-if st.button("Start Flask API and Agentic AI Listener"):
-    if os.path.exists(f"{MODEL_NAME}.pkl"):
+if st.button("🌐 Start API & Agentic AI"):
+    if os.path.exists(f"{MODEL_NAME}.pkl") and client_email:
         Thread(target=start_flask_api).start()
-        Thread(target=agentic_auto_reply_loop, args=(client_email,)).start()
-        st.success("Flask API and auto-response system started successfully!")
+        Thread(target=start_agentic_listener, args=(client_email,)).start()
+        st.success("🚀 API and auto-responder started!")
     else:
-        st.error("Train the model before deploying the API.")
+        st.warning("Train the model and enter client email first.")

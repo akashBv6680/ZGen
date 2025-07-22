@@ -1,4 +1,7 @@
 
+
+
+
 import streamlit as st
 import pandas as pd
 import pycaret.classification as clf
@@ -19,6 +22,7 @@ warnings.filterwarnings("ignore", module="matplotlib")
 EMAIL_ADDRESS = "akashvishnu6680@gmail.com"
 EMAIL_PASSWORD = "swpe pwsx ypqo hgnk" 
 TOGETHER_API_KEY = "tgp_v1_ecSsk1__FlO2mB_gAaaP2i-Affa6Dv8OCVngkWzBJUY"
+
 
 IMAP_SERVER = "imap.gmail.com"
 SMTP_SERVER = "smtp.gmail.com"
@@ -112,7 +116,7 @@ if uploaded_file and target:
     include_models = ['lr', 'rf', 'xgboost', 'lightgbm']
 
     if ml_type == "Classification":
-        clf.setup(data=df, target=target, session_id=123, fold=3, n_jobs=-1, html=False, silent=True)
+        clf.setup(data=df, target=target, session_id=123, fold=3, n_jobs=-1, html=False)
         model = clf.compare_models(include=include_models, turbo=True)
         tuned_model = clf.tune_model(model)
         clf.evaluate_model(tuned_model)
@@ -120,7 +124,7 @@ if uploaded_file and target:
         clf.save_model(tuned_model, 'my_model')
         st.success("✅ Classification model trained and saved.")
     else:
-        reg.setup(data=df, target=target, session_id=123, fold=3, n_jobs=-1, html=False, silent=True)
+        reg.setup(data=df, target=target, session_id=123, fold=3, n_jobs=-1, html=False)
         model = reg.compare_models(include=include_models, turbo=True)
         tuned_model = reg.tune_model(model)
         reg.evaluate_model(tuned_model)

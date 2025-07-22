@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import pycaret.classification as clf
@@ -108,9 +109,11 @@ if uploaded_file and target:
     st.write("✅ Dataset Preview")
     st.dataframe(df.head())
 
+    include_models = ['lr', 'rf', 'xgboost', 'lightgbm']
+
     if ml_type == "Classification":
         clf.setup(data=df, target=target, session_id=123, fold=3, n_jobs=-1, html=False, silent=True)
-        model = clf.compare_models(include=['lr', 'rf', 'xgboost', 'lightgbm'], turbo=True)
+        model = clf.compare_models(include=include_models, turbo=True)
         tuned_model = clf.tune_model(model)
         clf.evaluate_model(tuned_model)
         clf.interpret_model(tuned_model)
@@ -118,7 +121,7 @@ if uploaded_file and target:
         st.success("✅ Classification model trained and saved.")
     else:
         reg.setup(data=df, target=target, session_id=123, fold=3, n_jobs=-1, html=False, silent=True)
-        model = reg.compare_models(include=['lr', 'rf', 'xgboost', 'lightgbm'], turbo=True)
+        model = reg.compare_models(include=include_models, turbo=True)
         tuned_model = reg.tune_model(model)
         reg.evaluate_model(tuned_model)
         reg.interpret_model(tuned_model)
@@ -146,3 +149,4 @@ if st.button("📥 Check Email and Auto-Reply"):
             st.balloons()
     else:
         st.info("👭 No new emails found.")
+

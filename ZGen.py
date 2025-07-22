@@ -5,6 +5,12 @@ import pycaret.regression as reg
 import smtplib
 import ssl
 from email.message import EmailMessage
+import matplotlib
+import warnings
+
+# === Fix font warnings ===
+matplotlib.rcParams['font.family'] = 'DejaVu Sans'
+warnings.filterwarnings("ignore", module="matplotlib")
 
 # === Email Config ===
 EMAIL_ADDRESS = "akashvishnu6680@gmail.com"
